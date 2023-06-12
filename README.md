@@ -8,38 +8,39 @@ To stop project run ./shutdown.sh it will decompose all docker files
 
 To access questions you should send HTTP request on coresponding address
 
-API_A:
-- 1 - http://localhost:5000/A_1
-- 2 - http://localhost:5000/A_2
+- 1 - Return the list of existing domains for which pages were created.
+- 2 - Return all the pages which were created by the user with a specified user_id.
+- 3 - Return the number of articles created for a specified domain.
+- 4 - Return the page with the specified page_id
+- 5 - Return the id, name, and the number of created pages of all the users who created at least one page in a specified time range. 
+- 6 - Return the the page itself by pade_id 
+- 7 - Return the last num of querrys that were send. If num not specified return all logs
 
-For API B there also some parameters you cam pass
-
-API_B:
+REST_API:
 - 1 - http://localhost:5000/B_1
 - 2 - http://localhost:5000/B_2?user_id=2345678
 - 3 - http://localhost:5000/B_3?domain=commons.wikimedia.org
 - 4 - http://localhost:5000/B_4?page_id=132898304
 - 5 - http://localhost:5000/B_5?start=2023-6-10%2015:00:00&end=23-6-11%2015:00:00
+- 6 - http://localhost:5000/B_6?page_id=132898304
+- 7 - http://localhost:5000/logging?num=4 
 
 ## producer/read_stream.py
 
-Code here demonstrates an example of data ingestion into Kafka using a Kafka producer. It fetches real-time data from the Wikimedia stream and inserts it into a PostgreSQL database. Here's how the code works:
+It fetches real-time data from the Wikimedia stream and inserts it into a PostgreSQL database and Cassandra database. In Cassandra i put only page_id and the page itself, which i pull using python urllib
 
 ## Dependencies
 
 The code requires the following dependencies:
 
-- `kafka-python` library for Kafka integration
 - `datetime` library for working with timestamps
 - `json` library for JSON serialization and deserialization
 - `requests` library for making HTTP requests
-- `psycopg2` library for working with PostgreSQL databases
+- `flask` library for working with PostgreSQL databases
+- `hazelcast-python-client` library for working with PostgreSQL databases
+- `cassandra-driver` library for working with PostgreSQL databases
 
 Make sure you have these libraries installed before running the code.
-
-## Kafka Producer Configuration
-
-The code sets up a Kafka producer by importing the `KafkaProducer` class from the `kafka` module. It also imports the `socket` library to retrieve the hostname and uses it as the client ID for the producer. The `conf` dictionary specifies the Kafka bootstrap servers and the client ID.
 
 ## PostgreSQL Database Connection
 
@@ -59,19 +60,10 @@ For each relevant line of data, the code performs the following steps:
 2. Constructs a dictionary (`to_add`) to hold the extracted data.
 3. Escapes any special characters in the extracted strings.
 4. Constructs an SQL query using the extracted data.
-5. Executes the query using the PostgreSQL connection and commits the transaction.
-6. Sends the extracted data to the Kafka topic named "dataflow" using the Kafka producer.
+5. Pull the pade from url using urllib.
+6. Executes the query using the PostgreSQL and Cassandra connection and commits the transaction.
 
 If any error occurs during the execution of the SQL query, the code rolls back the transaction and prints the query for debugging purposes.
-
-## Dockerfile
-
-Dockerfile sets up the necessary environment for running the data ingestion code. Here are the steps performed by the Dockerfile:
-
-1. The base image is set to the latest version of Python.
-2. The `kafka-python`, `datetime`, `requests`, and `psycopg2-binary` Python packages are installed using `pip`.
-3. The `read_stream.py` file, containing the data ingestion code, is copied to the `/opt/app/` directory inside the Docker image.
-4. The entrypoint of the Docker image is set to run the `read_stream.py` script using the Python interpreter.
 
 ## Cleanup
 
@@ -80,31 +72,14 @@ Once the data ingestion is complete or an error occurs, the code closes the Post
 
 ## Docker-compose
 
-This YAML file provides a Docker Compose configuration for setting up a data pipeline environment. It describes the services required to build the pipeline and orchestrates their deployment using Docker containers. The configuration includes services such as Spark, ZooKeeper, Kafka, a producer, a database, and a RESTful API service.
+This YAML file provides a Docker Compose configuration for setting up a datapipeline environment. It describes the services required to build the pipeline and orchestrates their deployment using Docker containers. The configuration includes services such as producer, a databases, hazelcast, and a RESTful API services.
 
 ## Networks
 
----
-
-### D**atapipeline**
-
-This network is created to connect the services within the data pipeline environment. It allows the services to communicate with each other.
+All servises are in one network: datapipeline. It allows the services to communicate with each other.
 
 ## Services
 
----
-
-### S**park**
-
-This service uses the `bitnami/spark:3` Docker image to run Apache Spark in master mode. It is named "spark_master" and is set to restart automatically. The environment variables `SPARK_MODE` and various other Spark configuration variables are set to configure the Spark instance. It is connected to the `datapipeline` network and mounts the local directory `./spark` to the `/src` directory inside the container.
-
-### Z**ookeeper**
-
-This service uses the `confluentinc/cp-zookeeper:latest` Docker image to run Apache ZooKeeper, which is a centralized service for maintaining configuration information, naming, providing distributed synchronization, and more. It is named "zookeeper" and exposes port 32181. The environment variables `ZOOKEEPER_CLIENT_PORT` and `ZOOKEEPER_TICK_TIME` configure the ZooKeeper instance. It is connected to the `datapipeline` network.
-
-### K**afka**
-
-This service uses the `confluentinc/cp-kafka:latest` Docker image to run Apache Kafka, which is a distributed event streaming platform. It is named "kafka" and exposes port 9092. It depends on the `zookeeper` service to be running. The environment variables configure the Kafka instance, including the broker ID, ZooKeeper connection, listener security protocol, advertised listeners, and more. It is connected to the `datapipeline` network.
 
 ### P**roducer**
 
@@ -114,11 +89,23 @@ This service builds an image from the `./producer` directory. It depends on the 
 
 This service uses the `postgres:latest` Docker image to run a PostgreSQL database. It is named "database" and is set to restart automatically. The environment variables configure the database user, password, and default database name. It exposes port 5432 and is connected to the `datapipeline` network. Additionally, it mounts the local file `./postgres/create_tables.sql` to initialize the database with the provided SQL script.
 
+
 ### R**est_api**
 
-This service builds an image from the `./REST_API_B` directory. It depends on the `database` service to be running. It exposes port 5000 and is connected to the `datapipeline` network. It is set to restart automatically.
+This service builds an image from the `./REST_API` directory. It depends on the `database` service to be running. It exposes port 5000 and is connected to the `datapipeline` network. It is set to restart automatically.
 
-All of the services are connected to the `datapipeline` network, which allows them to communicate with each other. They are set to restart automatically to ensure they are always running.
+It responcible for all comunication user. It takes requert from user, forms a query and sents it to coresponding servise, wether it`s question to postgress database or cassangra.
+
+### H**azelcast**
+
+It`s hazelcast service, that starts hazelcast cluster, to store logs
+
+### R**elation_db** and C**assandra**
+
+Theese are servises to comunicate with databases. They recive requert by RESTfull API from REST_API container, execute query, parce results and return them.
+Also thes logs all queries to Hazelcast.
+If asked they can return nessesery logs. 
+
 
 ## create_tables.yml
 
