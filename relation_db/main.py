@@ -53,12 +53,10 @@ def logs():
         for i in range(size-1, size-num-1, -1):
             ret_logs.append(logging.get(i).result())
     else:
-        num = int(num)
         size = logging.size().result()
-        
         for i in range(size-1, -1, -1):
             ret_logs.append(logging.get(i).result())
-    return jsonify(ret_logs)
+    return jsonify(logs=ret_logs)
 
 
 
