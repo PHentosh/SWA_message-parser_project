@@ -138,5 +138,5 @@ These representations outline the structure of each table and the corresponding 
 
 
 
-Команда:
+## Команда:
 - Петро Гентош
