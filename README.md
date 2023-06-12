@@ -135,3 +135,8 @@ Thia SQL file contains the schema definitions for three tables: `main_table`, `d
 
 
 These representations outline the structure of each table and the corresponding data types for their respective columns.
+
+
+
+Команда:
+- Петро Гентош
